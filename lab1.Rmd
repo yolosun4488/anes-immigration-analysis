@@ -1,0 +1,165 @@
+---
+title: "Do Democrats and Republicans differ in their support for U.S. government policy toward immigrants in the 2024 ANES?"
+output: pdf_document
+date: "2025-10-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+```
+
+# 1. Importance and Context
+Immigration has become one of the most divisive issues in American politics. Over the past decade, debates about border security, unauthorized immigrants, and citizenship pathways have grown more intense, particularly during the Trump and Biden presidencies. Public opinion on immigration splits sharply along party lines: Democrats generally favor paths to citizenship and humanitarian approaches, while Republicans prefer stricter enforcement and border control.
+These partisan differences matter for several reasons. They shape policy debates, influence elections in border states, and reflect broader political polarization in America. This analysis examines approval of President Biden's handling of immigration using data from the 2024 American National Election Studies (ANES). Approval of the president's immigration policies reflects broader partisan attitudes toward immigration reform.
+This report tests whether Democrats and Republicans differ significantly in their approval of Biden's immigration handling. I compare average party evaluations using a two-sample t-test, which allows me to determine whether observed differences are statistically meaningful.
+
+# 2. Data and Methodology
+## 2.1 Data Source
+The data come from the 2024 American National Election Studies (ANES), a nationally representative survey of U.S. adults conducted during the 2024 presidential election. This analysis uses respondents with valid answers for partisanship and immigration policy views.
+
+## 2.2 Variables
+Partisanship (Independent Variable)
+Partisanship means which party a respondent identifies with. Following course guidelines, people who "lean" toward a party count as party members.
+Democrats: Strong, Not very strong, or Lean Democrat
+Republicans: Strong, Not very strong, or Lean Republican
+Pure Independents and others are excluded
+
+Immigration Policy Views (Dependent Variable):
+These measures which party respondents think would do a better job handling immigration using variable V241237. Responses are coded on a 1-5 scale:
+1. Democrats would do a much better job 
+2. Democrats would do a somewhat better job 
+3. Not much difference between them 
+4. Republicans would do a somewhat better job 
+5. Republicans would do a much better job
+"Refused," "Don't know," and "Inapplicable" responses are excluded.
+
+```{r wrangle, echo=FALSE}
+anes <- read_csv("/Users/peisun/Downloads/anes_timeseries_2024_csv_20250808/anes_timeseries_2024_csv_20250808.csv", show_col_types = FALSE)
+
+data_clean <- anes %>%
+  select(V241221, V241223, V241237) %>%
+  rename(
+    pid = V241221,
+    lean = V241223,
+    immig_party = V241237
+  ) %>%
+  mutate(
+    party = case_when(
+      pid %in% c(1, 2) ~ "Democrat",      
+      pid == 3 & lean == 1 ~ "Democrat",  
+      pid %in% c(5, 6) ~ "Republican",    
+      pid == 3 & lean == 2 ~ "Republican",
+      TRUE ~ NA_character_
+    ),
+    immig_party_clean = case_when(
+      immig_party %in% 1:5 ~ immig_party,
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  filter(!is.na(party), !is.na(immig_party_clean))
+
+```
+
+## 2.3 Hypotheses
+**H~0~:** $\mu_{Dem} = \mu_{Rep}$ (no difference between Democrats and Republicans)
+**H~1~:** $\mu_{Dem} \neq \mu_{Rep}$ (there is a difference)
+
+## 2.4 Statistical Test
+I use a two-sample Welch's t-test to compare the two groups.
+
+## 2.5 Assumptions:
+Independence: Each respondent in the ANES sample answered the survey once, contributing a single observation. The survey uses a probability sampling design without clustering within our variables of interest, so observations are independent. 
+
+Normality: The outcome variable is measured on a 1-5 ordinal scale, which is not truly continuous. However, the t-test is robust to violations of normality, especially with large samples (Democrat n=2404; Republican n=2192). The Central Limit Theorem suggests that sampling distributions of means will be approximately normal with samples this large. While mild violation exists, it should not substantially affect results.
+
+Unequal variances: The normality violation is minor given large samples. Using Welch's t-test addresses potential variance inequality. Overall, the test should provide valid inference.
+
+# 3. Results
+Democrats (n=2,404) average 2.19 while Republicans (n=2,192) average 4.59—a difference of 2.41 points. The non-overlapping 95% confidence intervals (Democrat: [2.15, 2.23]; Republican: [4.56, 4.63]) provide clear evidence of separation. 
+
+The Welch's t-test confirms this difference is highly significant (t = -87.97, df = 4377.9, p < .001) with an extremely large effect size (Cohen's d = 2.47). We reject the null hypothesis. Partisanship almost entirely determines immigration attitudes, with each party's supporters overwhelmingly favoring their own party's handling of the issue.
+
+Figure 1 below shows Democrats (2.19) believe Democrats would handle immigration better, while Republicans (4.59) believe Republicans would do better. The error bars show 95% confidence intervals.
+```{r descriptives,include=FALSE}
+data_clean <- anes %>%
+  select(V241221, V241223, V241237) %>%
+  rename(
+    pid = V241221,
+    lean = V241223,
+    immig_party = V241237
+  ) %>%
+  mutate(
+    party = case_when(
+      pid == 1 ~ "Democrat",              # Democrat
+      pid == 3 & lean == 3 ~ "Democrat",  # Independent
+      pid == 2 ~ "Republican",            # Republican
+      pid == 3 & lean == 1 ~ "Republican",# Independent
+      TRUE ~ NA_character_
+    ),
+    immig_party_clean = case_when(
+      immig_party %in% 1:5 ~ immig_party,
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  filter(!is.na(party), !is.na(immig_party_clean))
+
+party_summary <- data_clean %>%
+  group_by(party) %>%
+  summarise(
+    n = n(),
+    mean = mean(immig_party_clean),
+    sd = sd(immig_party_clean),
+    se = sd / sqrt(n),
+    ci_lower = mean - 1.96 * se,
+    ci_upper = mean + 1.96 * se
+  )
+
+party_summary
+
+dem_mean <- party_summary %>% filter(party == "Democrat") %>% pull(mean)
+rep_mean <- party_summary %>% filter(party == "Republican") %>% pull(mean)
+diff <- dem_mean - rep_mean
+
+cat("Democrat mean:", round(dem_mean, 2), "\n")
+cat("Republican mean:", round(rep_mean, 2), "\n")
+cat("Difference:", round(diff, 2), "\n")
+
+# t-test
+dem_data <- data_clean %>% filter(party == "Democrat") %>% pull(immig_party_clean)
+rep_data <- data_clean %>% filter(party == "Republican") %>% pull(immig_party_clean)
+
+t.test(dem_data, rep_data)
+```
+
+```{r plot, echo=FALSE, fig.cap="Average immigration views by party with 95% confidence intervals"}
+ggplot(party_summary, aes(x = party, y = mean, fill = party)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2) +
+  geom_text(aes(label = round(mean, 2)), vjust = -0.5, nudge_y = 0.1) +
+  scale_y_continuous(limits = c(0, 5.5), breaks = 1:5) +
+  scale_fill_manual(values = c("Democrat" = "blue", "Republican" = "red")) +
+  labs(
+    x = "Party",
+    y = "Average Score (1=Dems better, 5=Reps better)",
+    title = "Which Party Better Handle Immigration?"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+
+# 4. Discussion
+This analysis demonstrates that partisanship powerfully shapes immigration attitudes.This polarization has important practical consequences. With Democrats averaging 2.19 (near "Democrats somewhat better") and Republicans averaging 4.59 (near "Republicans much better"), there is virtually no common ground. This helps explain why comprehensive immigration reform has stalled in Congress—when party supporters hold such divergent evaluations, legislative compromise becomes politically costly. These findings align with immigration's role as a defining wedge issue in recent elections, affecting not only policy debates but also electoral strategy and media coverage.
+
+However,this analysis has several limitations. First, I do not use survey weights, so results reflect ANES respondents rather than the full U.S. population. Second, the measure captures perceived party competence rather than specific policy preferences—respondents may favor their party due to general loyalty beyond policy substance. Third, treating the ordinal 1-5 scale as continuous simplifies analysis but may not fully capture the discrete nature of responses.
+
+Despite these limitations, the findings clearly demonstrate that partisanship is central to immigration attitudes. Understanding this divide is essential for anyone analyzing immigration policy debates.
+
+
+
+
+
+
+
+
